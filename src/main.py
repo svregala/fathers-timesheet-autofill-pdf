@@ -276,7 +276,8 @@ def render_to_pdf(template_pdf: str,
                period_from: dt.date,
                period_to: dt.date,
                total_hours: float,
-               debug_grid: bool = False) -> None:
+               debug_grid: bool = False,
+               signature_date: Optional[dt.date] = None) -> None:
    reader = PdfReader(template_pdf)
    page = reader.pages[0]
    width = float(page.mediabox.width)
@@ -323,8 +324,13 @@ def render_to_pdf(template_pdf: str,
 
    # Footer totals & signature placeholders
    draw_text(c, LAYOUT["footer"]["total_hours"]["x"], LAYOUT["footer"]["total_hours"]["y"], f"{total_hours:g}")
-   draw_text(c, LAYOUT["footer"]["signature_name"]["x"], LAYOUT["footer"]["signature_name"]["y"], employee)
-   draw_text(c, LAYOUT["footer"]["signature_date"]["x"], LAYOUT["footer"]["signature_date"]["y"], period_to.strftime("%m/%d/%Y"))
+   #draw_text(c, LAYOUT["footer"]["signature_name"]["x"], LAYOUT["footer"]["signature_name"]["y"], employee)
+   # Use provided signature_date if given; otherwise default to the week end (period_to)
+   sig_date = signature_date or period_to
+   draw_text(c,
+             LAYOUT["footer"]["signature_date"]["x"],
+             LAYOUT["footer"]["signature_date"]["y"],
+             sig_date.strftime("%m/%d/%Y"))
 
    c.save()
 
@@ -356,6 +362,7 @@ def main():
    p.add_argument("--client", default="Albert Tim Cronin")
    p.add_argument("--ocr-json", help="Optional path to a pre-extracted JSON array of entries to skip OCR")
    p.add_argument("--debug-grid", action="store_true", help="Draw a grid to help align coordinates")
+   p.add_argument("--signature-date", dest="signature_date", help="Override signature date (YYYY-MM-DD). Defaults to end of week.")
 
    args = p.parse_args()
 
@@ -386,6 +393,14 @@ def main():
 
    total_hours = round(sum(e.hours for e in entries), 2)
 
+   # Determine signature date override if provided
+   sig_date: Optional[dt.date] = None
+   if getattr(args, "signature_date", None):
+      try:
+         sig_date = dt.date.fromisoformat(args.signature_date)
+      except Exception:
+         raise SystemExit("--signature-date must be in YYYY-MM-DD format")
+
    render_to_pdf(
       template_pdf=args.template,
       out_pdf=args.out,
@@ -396,6 +411,7 @@ def main():
       period_to=week_end,
       total_hours=total_hours,
       debug_grid=args.debug_grid,
+      signature_date=sig_date,
    )
 
    print(f"Wrote {args.out}\nWeek: {week_start} to {week_end}\nTotal hours: {total_hours}")
